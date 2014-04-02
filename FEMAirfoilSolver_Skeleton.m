@@ -64,7 +64,7 @@ if false %True for ranomization, false to leave mesh alone
 end
  
 % plot the triangulation
-trimesh(TRI, Nodes(:,1),Nodes(:,2))
+% trimesh(TRI, Nodes(:,1),Nodes(:,2))
 axis equal
 pause(0.1)
  
@@ -200,8 +200,6 @@ figure
 trisurf(TRI, Nodes(:,1), Nodes(:,2), Sol-500) % The 500 is random right now
 hold on
 trisurf(TRI, Nodes(:,1),-Nodes(:,2),Sol-500)
-quiver(Centroid(:,1), Centroid(:,2), Gradient_IE(:,1), Gradient_IE(:,2),.75,'k')
-quiver(Centroid(:,1), -Centroid(:,2), Gradient_IE(:,1), -Gradient_IE(:,2),.75,'k')
 shading interp
 title('Scalar Velocity Potential Distribution (Nodal) and the Velocity Vector Field')
 view([0 0 1])

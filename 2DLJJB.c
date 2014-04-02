@@ -1,5 +1,8 @@
-
-static char help[] = "Solves the 2D Laplacian on an unstructured grid with KSP.\n\n";
+/* Bevan, Josh UMass Lowell 2013-2014
+ *Developed with the help of Prof. Trelles, UMass Lowell
+ *In partial satisfaction of directed study 22.602 Fall 2013
+ *Solves the 2D Laplacian on an unstructured grid with KSP.*/
+static char help[] = "Solves the 2D Laplacian on an unstructured grid with KSP. Bevan 2014\n\n";
 
 #include <petscksp.h>
 
@@ -14,16 +17,19 @@ int main(int argc,char **args)
   PetscReal      norm; 			   /* norm of solution error */
   PetscErrorCode ierr;
   PetscInt       n = 81;				/*Number of DOFs*/
-  /*For simplicity of use the mesh input file lengths need to be manually input here JJBLeft[],JJBRight[],JJBElems[], and JJBNodes[]*/
-  PetscInt		   row[9],col[9],its,elnd[3],JJBElems[384],iter=0,NbElems,NbVertices,numint,xx=0,yy=1,ie,rstart,rend,nlocal,NbBound=3;
-  PetscInt 	   JJBLeft[3],JJBRight[3];
-  PetscScalar    value[9],n1[2],n2[2],n3[2],gn1[2],gn2[2],gn3[2],A11,A22,A33,A12,A13,A23,JJBNodes[162],numscal, TriArea;
-  PetscScalar	   LeftBC[3], RightBC[3];	/*Dirichlet BC values, top and bottom domains implicitly Neumann=0*/
+  /*For simplicity of use the mesh input file lengths need to be manually
+   *input here JJBLeft[],JJBRight[],JJBElems[], and JJBNodes[]*/
+  PetscInt		row[9],col[9],its,elnd[3],JJBElems[384],iter=0,NbElems,NbVertices;
+  PetscInt 	   	numint,xx=0,yy=1,ie,rstart,rend,nlocal,NbBound=3,JJBLeft[3],JJBRight[3];
+  PetscScalar   value[9],n1[2],n2[2],n3[2],gn1[2],gn2[2],gn3[2],A11,A22,A33,A12,A13,A23;
+  PetscScalar   JJBNodes[162],numscal,TriArea;
+  PetscScalar	LeftBC[3], RightBC[3];	/*Dirichlet BC values, top
+										 *and bottom domains implicitly Neumann=0*/
   PetscViewer	   viewer;
 
   PetscInitialize(&argc,&args,(char*)0,help);
   ierr = PetscOptionsGetInt(NULL,"-sizer",&n,NULL);CHKERRQ(ierr);
-/*---------------------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
   /* Create vectors. Create one vector and duplicate as needed.
    * The second argument to VecSetSizes() below causes PETSc to decide
    * how many elements per processor are assigned */
@@ -37,7 +43,7 @@ int main(int argc,char **args)
    * the choices made for the vector in VecSetSizes()*/
   ierr = VecGetOwnershipRange(x,&rstart,&rend);CHKERRQ(ierr);
   ierr = VecGetLocalSize(x,&nlocal);CHKERRQ(ierr);
-/*---------------------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
   /* Create matrix A with MatCreate(); matrix format can be 
    * specified at runtime
    * Use nlocal as the local size of the matrix, this ensures it will
@@ -46,7 +52,7 @@ int main(int argc,char **args)
   ierr = MatSetSizes(A,nlocal,nlocal,n,n);CHKERRQ(ierr);
   ierr = MatSetFromOptions(A);CHKERRQ(ierr);
   ierr = MatSetUp(A);CHKERRQ(ierr);
-/*---------------------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
 /*Read in mesh */
   
 	/*Read in elem/node associations*/
@@ -86,7 +92,7 @@ int main(int argc,char **args)
 	}
 	fclose(file4);
 	  
-/*---------------------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
   /* Assemble matrix.
 
      The linear system is distributed across the processors by
@@ -220,7 +226,7 @@ for (ie=0;ie<NbElems-1;ie+=3){
   /* Assemble the matrix */
 	ierr = MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 	ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-	
+/*----------------------------------------------------------------------*/	
 	/* Apply BCs
 	* MatZeroRows allows easy application of Dirichlet BCs by zeroing all entries
 	* except the main diag (i.e. the self-reference needed to enforce BCs */
@@ -236,7 +242,7 @@ for (ie=0;ie<NbElems-1;ie+=3){
 	ierr   = MatZeroRows(A,NbBound,JJBRight,1,0,0);CHKERRQ(ierr);
 	ierr = VecSetValues(b,NbBound,JJBRight,RightBC,INSERT_VALUES);CHKERRQ(ierr);
 
-/*---------------------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------*/
   ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr); /* Create linear solver context */
 
   /* Set operators. A also serves as preconditioning matrix */
@@ -255,8 +261,8 @@ for (ie=0;ie<NbElems-1;ie+=3){
     KSPSetFromOptions() is called _after_ any other customization
     routines */
   ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);
-  ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr); 							/* Solve linear system */
-/*---------------------------------------------------------------------------------------*/
+  ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr); 					/* Solve linear system */
+/*----------------------------------------------------------------------*/
   ierr = KSPView(ksp,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);  /* View solver info */
 
   /* Check the error*/
