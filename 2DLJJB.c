@@ -17,19 +17,16 @@ int main(int argc,char **args)
   PetscReal      norm; 			   /* norm of solution error */
   PetscErrorCode ierr;
   PetscInt       n = 81;				/*Number of DOFs*/
-  /*For simplicity of use the mesh input file lengths need to be manually
-   *input here JJBLeft[],JJBRight[],JJBElems[], and JJBNodes[]*/
-  PetscInt		row[9],col[9],its,elnd[3],JJBElems[384],iter=0,NbElems,NbVertices;
-  PetscInt 	   	numint,xx=0,yy=1,ie,rstart,rend,nlocal,NbBound=3,JJBLeft[3],JJBRight[3];
-  PetscScalar   value[9],n1[2],n2[2],n3[2],gn1[2],gn2[2],gn3[2],A11,A22,A33,A12,A13,A23;
-  PetscScalar   JJBNodes[162],numscal,TriArea;
-  PetscScalar	LeftBC[3], RightBC[3];	/*Dirichlet BC values, top
-										 *and bottom domains implicitly Neumann=0*/
+  /*For simplicity of use the mesh input file lengths need to be manually input here JJBHot[],JJBCold[],JJBElems[], and JJBNodes[]*/
+  PetscInt		   row[3],col[3],its,elnd[3],JJBElems[384],iter=0,NbElems,NbVertices,numint,xx=0,yy=1,ie,rstart,rend,nlocal,NbHot,NbCold;
+  PetscInt 	   JJBHot[9],JJBCold[9],start,end;
+  PetscScalar    value[9],n1[2],n2[2],n3[2],gn1[2],gn2[2],gn3[2],A11,A22,A33,A12,A13,A23,JJBNodes[162],numscal, TriArea;
+  PetscScalar	   HotBC[9], ColdBC[9];	/*Dirichlet BC values, top and bottom domains implicitly Neumann=0*/
   PetscViewer	   viewer;
 
   PetscInitialize(&argc,&args,(char*)0,help);
   ierr = PetscOptionsGetInt(NULL,"-sizer",&n,NULL);CHKERRQ(ierr);
-/*----------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------*/
   /* Create vectors. Create one vector and duplicate as needed.
    * The second argument to VecSetSizes() below causes PETSc to decide
    * how many elements per processor are assigned */
@@ -43,7 +40,7 @@ int main(int argc,char **args)
    * the choices made for the vector in VecSetSizes()*/
   ierr = VecGetOwnershipRange(x,&rstart,&rend);CHKERRQ(ierr);
   ierr = VecGetLocalSize(x,&nlocal);CHKERRQ(ierr);
-/*----------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------*/
   /* Create matrix A with MatCreate(); matrix format can be 
    * specified at runtime
    * Use nlocal as the local size of the matrix, this ensures it will
@@ -52,7 +49,7 @@ int main(int argc,char **args)
   ierr = MatSetSizes(A,nlocal,nlocal,n,n);CHKERRQ(ierr);
   ierr = MatSetFromOptions(A);CHKERRQ(ierr);
   ierr = MatSetUp(A);CHKERRQ(ierr);
-/*----------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------*/
 /*Read in mesh */
   
 	/*Read in elem/node associations*/
@@ -62,6 +59,7 @@ int main(int argc,char **args)
 		iter++;
 	}
 	NbElems = iter/3;
+	ierr = PetscPrintf(PETSC_COMM_WORLD,"JJB: Read in %D elements.\n",NbElems);CHKERRQ(ierr);
 	fclose(file);
 
 	/*Read in vertex coordinates*/
@@ -72,27 +70,31 @@ int main(int argc,char **args)
 		iter++;
 	}
 	NbVertices = iter/2;
+	ierr = PetscPrintf(PETSC_COMM_WORLD,"JJB: Read in %D nodes.\n",NbVertices);CHKERRQ(ierr);
 	fclose(file2);
-	/*Read in Left BC*/
-	FILE *file3 = fopen("JJBLeft", "r");
+	
+	/*Read in Hot BC*/
+	FILE *file3 = fopen("JJBHot", "r");
 	iter=0;
 	while(fscanf(file3, "%d", &numint) == 1) {
-		JJBLeft[iter] = numint-1;
+		JJBHot[iter] = numint-1;
 		iter++;
 	}
-	NbBound = iter;
+	NbHot = iter;
 	fclose(file3);
 	
-	/*Read in Right BC*/
-	FILE *file4 = fopen("JJBRight", "r");
+	/*Read in Cold BC*/
+	FILE *file4 = fopen("JJBCold", "r");
 	iter=0;
 	while(fscanf(file4, "%d", &numint) == 1) {
-		JJBRight[iter] = numint-1;
+		JJBCold[iter] = numint-1;
 		iter++;
 	}
+	NbCold = iter;
 	fclose(file4);
-	  
-/*----------------------------------------------------------------------*/
+	ierr = PetscPrintf(PETSC_COMM_WORLD,"JJB: Read in %D explicit boundary nodes.\n",NbHot+NbCold);CHKERRQ(ierr);
+
+/*---------------------------------------------------------------------------------------*/
   /* Assemble matrix.
 
      The linear system is distributed across the processors by
@@ -104,13 +106,21 @@ int main(int argc,char **args)
   /* From manual: The routine MatSetValuesBlocked() may offer much
    * better efficiency for users of block sparse formats
    * (MATSEQBAIJ and MATMPIBAIJ) */
+	ierr = MatGetOwnershipRange(A, &start, &end);CHKERRQ(ierr);
+	if (end!=n){end -= 1;}
+	ierr = PetscPrintf(PETSC_COMM_WORLD,"JJB: ____Processor Partitioning____\n");CHKERRQ(ierr);
+	ierr = PetscSynchronizedPrintf(PETSC_COMM_WORLD,"JJB: (Nodes) Start: %D, End %D\n",start,end);CHKERRQ(ierr);
+	if (start!=0){start = (floor((((1.0*start)-1)/n)*NbElems)+1)*3;}
+	end = floor(((1.0*end)/n)*NbElems)*3;
+	ierr = PetscSynchronizedPrintf(PETSC_COMM_WORLD,"JJB: (Elements) Start: %D, End %D\n",start,end);CHKERRQ(ierr);
+	ierr = PetscSynchronizedFlush(PETSC_COMM_WORLD);CHKERRQ(ierr);
 
-for (ie=0;ie<NbElems-1;ie+=3){
-	ierr = PetscPrintf(PETSC_COMM_WORLD,"JJB: ie: %D\n",ie);CHKERRQ(ierr);
+for (ie=start;(ie<end+1)&&(ie<NbElems*3);ie+=3){
 	/*For each element find the associated node numbers */
     elnd[0] = JJBElems[ie]-1;
     elnd[1] = JJBElems[ie+1]-1;
     elnd[2] = JJBElems[ie+2]-1;
+	ierr = PetscSynchronizedPrintf(PETSC_COMM_WORLD,"JJB: ie %D\n",ie);CHKERRQ(ierr);
     
 	/* Determine element node locations */
 	n1[xx] = JJBNodes[2*elnd[0]];
@@ -121,7 +131,7 @@ for (ie=0;ie<NbElems-1;ie+=3){
 	n3[yy] = JJBNodes[(2*elnd[2])+1];
 	
     /*Calculate bounded area*/
-    TriArea = abs(( (n1[xx]*(n2[yy]-n3[yy])) + (n2[xx]*(n3[yy]-n1[yy])) + (n3[xx]*(n1[yy]-n2[yy])) )/2);
+    TriArea = fabs(( (n1[xx]*(n2[yy]-n3[yy])) + (n2[xx]*(n3[yy]-n1[yy])) + (n3[xx]*(n1[yy]-n2[yy])) )/2);
 
     /*Calculate gradients:
 	 * without the benefit of a low overhead linear solver these
@@ -182,30 +192,20 @@ for (ie=0;ie<NbElems-1;ie+=3){
 	value[7] = A23;
 	value[8] = A33;
 	
+	/*ierr = PetscPrintf(PETSC_COMM_WORLD,"JJB: ie: %D\n",ie);CHKERRQ(ierr);
+	for (iter=0;iter<9;iter+=1){
+		ierr = PetscPrintf(PETSC_COMM_WORLD,"JJB: Val: %lf\n",value[iter]);CHKERRQ(ierr);
+	}*/
+	
 	/*Create global node index arrays for stamping*/
 	row[0] = elnd[0];
 	row[1] = elnd[1];
 	row[2] = elnd[2];
-	
-	row[3] = elnd[0];
-	row[4] = elnd[1];
-	row[5] = elnd[2];
-	
-	row[6] = elnd[0];
-	row[7] = elnd[1];
-	row[8] = elnd[2];
+
 	/*-*/
 	col[0] = elnd[0];
-	col[1] = elnd[0];
-	col[2] = elnd[0];
-	
-	col[3] = elnd[1];
-	col[4] = elnd[1];
-	col[5] = elnd[1];
-	
-	col[6] = elnd[2];
-	col[7] = elnd[2];
-	col[8] = elnd[2];
+	col[1] = elnd[1];
+	col[2] = elnd[2];
 
 	/* Stamp in local elemental matrix into global matrix of form: */ 
 	/*					   
@@ -220,29 +220,36 @@ for (ie=0;ie<NbElems-1;ie+=3){
     A(N1, N3) = A(N1, N3) + A_elemental(1,3);
     A(N2, N3) = A(N2, N3) + A_elemental(2,3);
     A(N3, N3) = A(N3, N3) + A_elemental(3,3);*/
-    ierr   = MatSetValues(A,9,row,9,col,value,ADD_VALUES);CHKERRQ(ierr);
+    ierr = MatSetValues(A,3,row,3,col,value,ADD_VALUES);CHKERRQ(ierr);
 }
 
   /* Assemble the matrix */
 	ierr = MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 	ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
-/*----------------------------------------------------------------------*/	
+	
 	/* Apply BCs
 	* MatZeroRows allows easy application of Dirichlet BCs by zeroing all entries
 	* except the main diag (i.e. the self-reference needed to enforce BCs */
 	ierr = VecSet(b,0);CHKERRQ(ierr);
 
-	for(iter=0;iter<NbBound;iter++){
-		LeftBC[iter] = 2;
-		RightBC[iter] = 1;
-	} 
-	ierr   = MatZeroRows(A,NbBound,JJBLeft,1,0,0);CHKERRQ(ierr);
-	ierr = VecSetValues(b,NbBound,JJBLeft,LeftBC,INSERT_VALUES);CHKERRQ(ierr);
+	for(iter=0;iter<NbHot;iter++){
+		HotBC[iter] = 100;
+	}
+	for(iter=0;iter<NbCold;iter++){
+		ColdBC[iter] = 10;
+	}
+	ierr   = MatZeroRows(A,NbHot,JJBHot,1,0,0);CHKERRQ(ierr);
+	ierr = VecSetValues(b,NbHot,JJBHot,HotBC,INSERT_VALUES);CHKERRQ(ierr);
 
-	ierr   = MatZeroRows(A,NbBound,JJBRight,1,0,0);CHKERRQ(ierr);
-	ierr = VecSetValues(b,NbBound,JJBRight,RightBC,INSERT_VALUES);CHKERRQ(ierr);
+	ierr   = MatZeroRows(A,NbCold,JJBCold,1,0,0);CHKERRQ(ierr);
+	ierr = VecSetValues(b,NbCold,JJBCold,ColdBC,INSERT_VALUES);CHKERRQ(ierr);
+	
+	ierr = VecAssemblyBegin(b);CHKERRQ(ierr);
+	ierr = VecAssemblyEnd(b);CHKERRQ(ierr);
+	
+	ierr   = MatView(A,0);CHKERRQ(ierr);
 
-/*----------------------------------------------------------------------*/
+/*---------------------------------------------------------------------------------------*/
   ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr); /* Create linear solver context */
 
   /* Set operators. A also serves as preconditioning matrix */
@@ -261,8 +268,8 @@ for (ie=0;ie<NbElems-1;ie+=3){
     KSPSetFromOptions() is called _after_ any other customization
     routines */
   ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);
-  ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr); 					/* Solve linear system */
-/*----------------------------------------------------------------------*/
+  ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr); 							/* Solve linear system */
+/*---------------------------------------------------------------------------------------*/
   ierr = KSPView(ksp,PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);  /* View solver info */
 
   /* Check the error*/
@@ -271,7 +278,7 @@ for (ie=0;ie<NbElems-1;ie+=3){
   ierr = PetscPrintf(PETSC_COMM_WORLD,"JJB: Norm of error %G, Iterations %D\n",norm,its);CHKERRQ(ierr);
   
   /* Output solution vector to file for external plotting*/
-  ierr = PetscViewerASCIIOpen(PETSC_COMM_WORLD,"x.output",&viewer);CHKERRQ(ierr);
+  ierr = PetscViewerASCIIOpen(PETSC_COMM_WORLD,"JJBx.output",&viewer);CHKERRQ(ierr);
   ierr = VecView(x,viewer);CHKERRQ(ierr);
 
   /* Free work space */

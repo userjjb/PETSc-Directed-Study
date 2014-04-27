@@ -1,17 +1,10 @@
-%Bevan 2014
-%Simple mesh generation wrapper that ultimately uses Delaunay() 
-%triangulation. Ideally a mesh generator generates node 
-%numbering such that neighbouring nodes are close to each other
-%in value.
-%This script also optionally allows "scrambling" of node numbers
-%To remove any "nice" banding of the A matrix to investigate
-%its effect on PETSc parallel overhead
+clear all
 
 Shape = 1; %[1 0045];
 DomainSize = 4;
 ref = 2;
 powerRef = 2;
-[TRItemp, Nodestemp, Toptemp, Bottomtemp, Lefttemp, Righttemp, InnerBoundarytemp] = getDiscreteGeometry(Shape, DomainSize, ref, powerRef);
+[TRItemp, Nodestemp, Toptemp, Bottomtemp, Lefttemp, Righttemp, InnerBound] = getDiscreteGeometry(Shape, DomainSize, ref, powerRef);
 
 %Allow ranomization of node order to investigate sparse pattern
 Nodes = Nodestemp;
@@ -20,27 +13,31 @@ Top = Toptemp;
 Bottom =Bottomtemp;
 Left = Lefttemp;
 Right = Righttemp;
+
+for i=1:length(InnerBound)
+    InnerBoundarytemp(i) = find(and(abs(Nodes(:,1)-InnerBound(i,1))<1e-10,abs(Nodes(:,2)-InnerBound(i,2))<1e-10));
+end
 InnerBoundary = InnerBoundarytemp;
 
-if false %True for ranomization, false to leave mesh alone
+if false %True for randomization, false to leave mesh alone
     Choices = 1:length(Nodes);
     for i=1:length(Nodes)
         Chooser = max(1,round(rand(1)*length(Choices)));
         Chosen = Choices(Chooser);
-			Nodes(i,:) = Nodestemp(Chosen,:);
-			TRI(TRItemp==Chosen) = i;
-			Top(Toptemp==Chosen) = i;
-			Bottom(Bottomtemp==Chosen) = i;
-			Left(Lefttemp==Chosen) = i;
-			Right(Righttemp==Chosen) = i;
-			InnerBoundary(InnerBoundarytemp==Chosen) = i;
-			Choices = Choices([1:Chooser-1 , Chooser+1:end]);
+        Nodes(i,:) = Nodestemp(Chosen,:);
+        TRI(TRItemp==Chosen) = i;
+        Top(Toptemp==Chosen) = i;
+        Bottom(Bottomtemp==Chosen) = i;
+        Left(Lefttemp==Chosen) = i;
+        Right(Righttemp==Chosen) = i;
+        InnerBoundary(InnerBoundarytemp==Chosen) = i;
+        Choices = Choices([1:Chooser-1 , Chooser+1:end]);
     end
 end
 
 Nodes = reshape(Nodes',1,numel(Nodes))';
 
 dlmwrite('JJBElems',reshape(TRI',1,numel(TRI)), 'delimiter', '\n');
-dlmwrite('JJBLeft',Left, 'delimiter', '\n');
-dlmwrite('JJBRight',Right, 'delimiter', '\n');
+dlmwrite('JJBCold',unique([Left' Top' Right'])', 'delimiter', '\n');
+dlmwrite('JJBHot',InnerBoundary', 'delimiter', '\n');
 save('JJBNodes','Nodes','-ascii','-double');
