@@ -33,7 +33,7 @@ clear all;
 %=========================================================================
 
                                                     %Shape, DomainSize, ref, powerRef
-[TRI, Nodes, Top, Bottom, Left, Right, InnerBound] = getDiscreteGeometry(1, 2, 2, 2);
+[TRI, Nodes, Top, Bottom, Left, Right, InnerBound] = getDiscreteGeometry(1, 3, 2, 2);
 for i=1:length(InnerBound)
     InnerBoundary(i) = find(and(abs(Nodes(:,1)-InnerBound(i,1))<1e-10,abs(Nodes(:,2)-InnerBound(i,2))<1e-10));
 end
